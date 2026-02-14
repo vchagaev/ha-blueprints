@@ -30,6 +30,8 @@ blueprint:
         - Added support for RGB color syncing
         - Added support for HSV color syncing
         - Added support for XY color syncing
+        - Fixed issue where changing brightness and color simultaneously would only sync one attribute
+        - Changed to single state trigger that handles all attribute changes in one action
       - 1.3: (2024-07-10 - thanks @jsenecal for PR #2)
         - Ignore changes to entities triggered by this automation
         - Do not change the state of the entity triggering the automation
@@ -80,133 +82,91 @@ variables:
 
 trigger:
   - platform: state
-    id: turn_on
     entity_id: !input linked_entity
-    from: "off"
-    to: "on"
-  - platform: state
-    id: turn_off
-    entity_id: !input linked_entity
-    from: "on"
-    to: "off"
-  - platform: state
-    id: set_speed
-    entity_id: !input linked_entity
-    attribute: percentage
-  - platform: state
-    id: set_brightness
-    entity_id: !input linked_entity
-    attribute: brightness
-  - platform: state
-    id: set_color_temp
-    entity_id: !input linked_entity
-    attribute: color_temp
-  - platform: state
-    id: set_rgb_color
-    entity_id: !input linked_entity
-    attribute: rgb_color
-  - platform: state
-    id: set_hs_color
-    entity_id: !input linked_entity
-    attribute: hs_color
-  - platform: state
-    id: set_xy_color
-    entity_id: !input linked_entity
-    attribute: xy_color
 
 condition:
   - condition: template
     value_template: "{{ trigger.to_state.context.id != this.context.id }}"
+  - condition: template
+    value_template: >-
+      {{ trigger.from_state.state != trigger.to_state.state or
+         trigger.from_state.attributes.brightness != trigger.to_state.attributes.brightness or
+         trigger.from_state.attributes.color_temp != trigger.to_state.attributes.color_temp or
+         trigger.from_state.attributes.rgb_color != trigger.to_state.attributes.rgb_color or
+         trigger.from_state.attributes.hs_color != trigger.to_state.attributes.hs_color or
+         trigger.from_state.attributes.xy_color != trigger.to_state.attributes.xy_color or
+         trigger.from_state.attributes.percentage != trigger.to_state.attributes.percentage }}
 
 action:
   - choose:
+      # Handle on/off state changes
       - conditions:
-          - condition: trigger
-            id: turn_on
+          - condition: template
+            value_template: "{{ trigger.from_state.state == 'off' and trigger.to_state.state == 'on' }}"
         sequence:
           - service: "homeassistant.turn_on"
             target:
-              entity_id: "{{linked_entities | reject('eq', trigger.entity_id) | list }}"
+              entity_id: "{{ linked_entities | reject('eq', trigger.entity_id) | list }}"
           - delay:
               milliseconds: !input delay_miliseconds
       - conditions:
-          - condition: trigger
-            id: turn_off
+          - condition: template
+            value_template: "{{ trigger.from_state.state == 'on' and trigger.to_state.state == 'off' }}"
         sequence:
           - service: "homeassistant.turn_off"
             target:
-              entity_id: "{{linked_entities | reject('eq', trigger.entity_id) | list }}"
+              entity_id: "{{ linked_entities | reject('eq', trigger.entity_id) | list }}"
           - delay:
               milliseconds: !input delay_miliseconds
+      # Handle fan speed changes
       - conditions:
-          - condition: trigger
-            id: set_speed
+          - condition: template
+            value_template: "{{ trigger.to_state.attributes.percentage is defined and trigger.from_state.attributes.percentage != trigger.to_state.attributes.percentage }}"
         sequence:
-          - variables:
-              set_fan_speed: "{{ trigger.to_state.attributes.percentage }}"
           - service: fan.set_percentage
+            target:
+              entity_id: "{{ linked_entities | reject('eq', trigger.entity_id) | list }}"
             data:
-              entity_id: "{{linked_entities | reject('eq', trigger.entity_id) | list }}"
-              percentage: "{{ set_fan_speed }}"
+              percentage: "{{ trigger.to_state.attributes.percentage }}"
           - delay:
               milliseconds: !input delay_miliseconds
+      # Handle light attribute changes (brightness, color, color_temp)
       - conditions:
-          - condition: trigger
-            id: set_brightness
+          - condition: template
+            value_template: >-
+              {{ trigger.to_state.attributes.brightness is defined or
+                 trigger.to_state.attributes.color_temp is defined or
+                 trigger.to_state.attributes.rgb_color is defined or
+                 trigger.to_state.attributes.hs_color is defined or
+                 trigger.to_state.attributes.xy_color is defined }}
+          - condition: template
+            value_template: >-
+              {{ trigger.from_state.attributes.brightness != trigger.to_state.attributes.brightness or
+                 trigger.from_state.attributes.color_temp != trigger.to_state.attributes.color_temp or
+                 trigger.from_state.attributes.rgb_color != trigger.to_state.attributes.rgb_color or
+                 trigger.from_state.attributes.hs_color != trigger.to_state.attributes.hs_color or
+                 trigger.from_state.attributes.xy_color != trigger.to_state.attributes.xy_color }}
         sequence:
-          - variables:
-              set_light_brightness: "{{ trigger.to_state.attributes.brightness }}"
           - service: light.turn_on
-            data:
-              entity_id: "{{linked_entities | reject('eq', trigger.entity_id) | list }}"
-              brightness: "{{ set_light_brightness }}"
-          - delay:
-              milliseconds: !input delay_miliseconds
-      - conditions:
-          - condition: trigger
-            id: set_color_temp
-        sequence:
-          - variables:
-              set_light_color_temp: "{{ trigger.to_state.attributes.color_temp }}"
-          - service: light.turn_on
-            data:
-              entity_id: "{{linked_entities | reject('eq', trigger.entity_id) | list }}"
-              color_temp: "{{ set_light_color_temp }}"
-          - delay:
-              milliseconds: !input delay_miliseconds
-      - conditions:
-          - condition: trigger
-            id: set_rgb_color
-        sequence:
-          - variables:
-              set_light_rgb_color: "{{ trigger.to_state.attributes.rgb_color }}"
-          - service: light.turn_on
-            data:
-              entity_id: "{{linked_entities | reject('eq', trigger.entity_id) | list }}"
-              rgb_color: "{{ set_light_rgb_color }}"
-          - delay:
-              milliseconds: !input delay_miliseconds
-      - conditions:
-          - condition: trigger
-            id: set_hs_color
-        sequence:
-          - variables:
-              set_light_hs_color: "{{ trigger.to_state.attributes.hs_color }}"
-          - service: light.turn_on
-            data:
-              entity_id: "{{linked_entities | reject('eq', trigger.entity_id) | list }}"
-              hs_color: "{{ set_light_hs_color }}"
-          - delay:
-              milliseconds: !input delay_miliseconds
-      - conditions:
-          - condition: trigger
-            id: set_xy_color
-        sequence:
-          - variables:
-              set_light_xy_color: "{{ trigger.to_state.attributes.xy_color }}"
-          - service: light.turn_on
-            data:
-              entity_id: "{{linked_entities | reject('eq', trigger.entity_id) | list }}"
-              xy_color: "{{ set_light_xy_color }}"
+            target:
+              entity_id: "{{ linked_entities | reject('eq', trigger.entity_id) | list }}"
+            data: >-
+              {% set data = {} %}
+              {% if trigger.to_state.attributes.brightness is defined and trigger.from_state.attributes.brightness != trigger.to_state.attributes.brightness %}
+                {% set data = dict(data, brightness=trigger.to_state.attributes.brightness) %}
+              {% endif %}
+              {% if trigger.to_state.attributes.color_temp is defined and trigger.from_state.attributes.color_temp != trigger.to_state.attributes.color_temp %}
+                {% set data = dict(data, color_temp=trigger.to_state.attributes.color_temp) %}
+              {% endif %}
+              {% if trigger.to_state.attributes.rgb_color is defined and trigger.from_state.attributes.rgb_color != trigger.to_state.attributes.rgb_color %}
+                {% set data = dict(data, rgb_color=trigger.to_state.attributes.rgb_color) %}
+              {% endif %}
+              {% if trigger.to_state.attributes.hs_color is defined and trigger.from_state.attributes.hs_color != trigger.to_state.attributes.hs_color %}
+                {% set data = dict(data, hs_color=trigger.to_state.attributes.hs_color) %}
+              {% endif %}
+              {% if trigger.to_state.attributes.xy_color is defined and trigger.from_state.attributes.xy_color != trigger.to_state.attributes.xy_color %}
+                {% set data = dict(data, xy_color=trigger.to_state.attributes.xy_color) %}
+              {% endif %}
+              {{ data }}
           - delay:
               milliseconds: !input delay_miliseconds
