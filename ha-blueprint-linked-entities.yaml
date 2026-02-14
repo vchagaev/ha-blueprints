@@ -1,70 +1,51 @@
 blueprint:
-  name: Linked Entities (with Color Sync)
+  name: Master-Slave Linked Entities
   description: >-
 
-    [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2Falexdelprete%2Fha-blueprints%2Fmain%2Fha-blueprint-linked-entities.yaml)
+    **Master-Slave Linked Entities v2.0** 🔛
 
-    **Linked Entities v1.4 (with Color Sync)** 🔛
+    This blueprint creates a unidirectional link between a master entity and a slave entity.
+    The slave will mirror ALL changes from the master, but changes to the slave will NOT affect the master.
 
-    This blueprint allows you to easily create/maintain an automation that links the state of multiple entities:
-      - turn ANY linked entity ON, it will turn ON ALL linked entities.
-      - turn ANY linked entity OFF, it will turn OFF ALL linked entities.
-      - set the brightness of any light entity, it will set the same brightness of ALL linked light entities.
-      - set the color temp of any light entity, it will set the same color temperature of ALL linked light entities.
-      - **set the RGB color of any light entity, it will set the same RGB color of ALL linked light entities.**
-      - **set the HSV color of any light entity, it will set the same HSV color of ALL linked light entities.**
-      - **set the XY color of any light entity, it will set the same XY color of ALL linked light entities.**
-      - set the speed (percentage) of any fan entity, it will set the speed of ALL linked fan entities.
+    **Features:**
+      - turn the MASTER entity ON → SLAVE turns ON
+      - turn the MASTER entity OFF → SLAVE turns OFF
+      - set the MASTER brightness → SLAVE brightness matches
+      - set the MASTER color temp → SLAVE color temp matches
+      - set the MASTER RGB/HS/XY color → SLAVE color matches
+      - set the MASTER fan speed → SLAVE fan speed matches
 
-    **NOTE**: You can select any entity with an ON/OFF state (switches, lights, etc.), lights with brightness, color temperature, or color attributes, and Fans with speed (percentage) attributes.
+    **Use cases:**
+      - Mirror a physical switch to a virtual switch
+      - Sync a smart bulb to follow another bulb (one-way)
+      - Make a dashboard entity follow a real device
+      - LED indicator lights that follow device states
 
-    My main use-case was for multiple light switches in the house controlling the same light, but I also use it for other things:
-      - at dawn, when I turn on the external lights (a shelly switch), I also link the pool light mqtt switch.
-      - when I want to open the external gate, I can use several linked switches in multiple rooms of the house
-      - when I want to manually turn on/off the irrigation system, I use two switches (internal and external) to activate my RainMachine cycle
-
-    I'm sure you'll find many more use-cases. :slight_smile:
+    **IMPORTANT**: Only the master controls the slave. Changes to the slave are ignored.
 
     **CHANGELOG:**
-      - 1.4: (2025-02-14 - Enhanced version with color sync)
-        - Added support for RGB color syncing
-        - Added support for HSV color syncing
-        - Added support for XY color syncing
-        - Changed mode to 'queued' (max 5) to handle apps that send multiple rapid state updates
-      - 1.3: (2024-07-10 - thanks @jsenecal for PR #2)
-        - Ignore changes to entities triggered by this automation
-        - Do not change the state of the entity triggering the automation
-      - 1.2: (2024-01-28 - thanks @phrak / @TimU for PR #1)
-        - Changed the action to a "Choose" building block to support fan, light and future attributes
-        - Added support for linked fan speeds
-        - Added support for linked light brightness and light color temperature
-      - 1.1: (2024-01-09)
-        - Optimized service call leveraging trigger.id
-        - Introduced max_exceeded to avoid warnings in log due to possible self-triggering
-        - Introduced a small delay after the service call to throttle the automation
-      - 1.0: (2023-12-29)
-        - First official release
-
-    **If you like to show your support please hit click here:**
-    [![contributions - welcome](https://img.shields.io/badge/contributions-welcome-blue)](https://www.paypal.com/donate/?hosted_button_id=8V9YE6S5E869G "PayPal Donation")
-
-    **Source:**
-    [![alexdelprete - ha-blueprints](https://img.shields.io/static/v1?label=alexdelprete&message=ha-blueprints&color=blue&logo=github)](https://github.com/alexdelprete/ha-blueprints/blob/main/ha-blueprint-linked-entities.yaml "Go to GitHub repo") [![stars - ha-blueprints](https://img.shields.io/github/stars/alexdelprete/ha-blueprints?style=social)](https://github.com/alexdelprete/ha-blueprints) [![forks - ha-blueprints](https://img.shields.io/github/forks/alexdelprete/ha-blueprints?style=social)](https://github.com/alexdelprete/ha-blueprints)
-
-    **Support:**
-    [![HA Community - Topic](https://img.shields.io/static/v1?label=HA+Community&message=Topic&color=2ea44f&logo=home-assistant)](https://community.home-assistant.io/t/linked-entities-keep-mutlple-entities-binary-state-in-sync-lights-switches-etc/662836?u=alexdelprete)
+      - 2.0: (2025-02-14)
+        - Complete rewrite for unidirectional master → slave control
+        - Master entity only triggers automation
+        - Slave entity only receives commands
+        - Supports all color modes (RGB, HS, XY)
+        - Supports brightness, color temp, and fan speed
 
   domain: automation
   input:
-    linked_entity:
-      name: Linked Entities
-      description: Entities whose state and attributes will be linked (if any of them transitions to ON state, all will be ON. Same for the OFF, BRIGHTNESS, COLOR_TEMP, RGB_COLOR, HS_COLOR, XY_COLOR, and SPEED states).
+    master_entity:
+      name: Master Entity
+      description: The entity that controls the slave. Only changes to THIS entity trigger the automation.
       selector:
         entity:
-          multiple: true
+    slave_entity:
+      name: Slave Entity
+      description: The entity that mirrors the master. This entity will be controlled but will NOT trigger the automation.
+      selector:
+        entity:
     delay_miliseconds:
       name: Delay
-      description: How long to delay changes to linked entities
+      description: How long to delay changes to the slave entity
       selector:
         number:
           min: 0
@@ -78,42 +59,43 @@ max: 5
 max_exceeded: silent
 
 variables:
-  linked_entities: !input linked_entity
+  master: !input master_entity
+  slave: !input slave_entity
 
 trigger:
   - platform: state
     id: turn_on
-    entity_id: !input linked_entity
+    entity_id: !input master_entity
     from: "off"
     to: "on"
   - platform: state
     id: turn_off
-    entity_id: !input linked_entity
+    entity_id: !input master_entity
     from: "on"
     to: "off"
   - platform: state
     id: set_speed
-    entity_id: !input linked_entity
+    entity_id: !input master_entity
     attribute: percentage
   - platform: state
     id: set_brightness
-    entity_id: !input linked_entity
+    entity_id: !input master_entity
     attribute: brightness
   - platform: state
     id: set_color_temp
-    entity_id: !input linked_entity
+    entity_id: !input master_entity
     attribute: color_temp
   - platform: state
     id: set_rgb_color
-    entity_id: !input linked_entity
+    entity_id: !input master_entity
     attribute: rgb_color
   - platform: state
     id: set_hs_color
-    entity_id: !input linked_entity
+    entity_id: !input master_entity
     attribute: hs_color
   - platform: state
     id: set_xy_color
-    entity_id: !input linked_entity
+    entity_id: !input master_entity
     attribute: xy_color
 
 condition:
@@ -128,7 +110,7 @@ action:
         sequence:
           - service: "homeassistant.turn_on"
             target:
-              entity_id: "{{linked_entities | reject('eq', trigger.entity_id) | list }}"
+              entity_id: !input slave_entity
           - delay:
               milliseconds: !input delay_miliseconds
       - conditions:
@@ -137,7 +119,7 @@ action:
         sequence:
           - service: "homeassistant.turn_off"
             target:
-              entity_id: "{{linked_entities | reject('eq', trigger.entity_id) | list }}"
+              entity_id: !input slave_entity
           - delay:
               milliseconds: !input delay_miliseconds
       - conditions:
@@ -147,8 +129,9 @@ action:
           - variables:
               set_fan_speed: "{{ trigger.to_state.attributes.percentage }}"
           - service: fan.set_percentage
+            target:
+              entity_id: !input slave_entity
             data:
-              entity_id: "{{linked_entities | reject('eq', trigger.entity_id) | list }}"
               percentage: "{{ set_fan_speed }}"
           - delay:
               milliseconds: !input delay_miliseconds
@@ -159,8 +142,9 @@ action:
           - variables:
               set_light_brightness: "{{ trigger.to_state.attributes.brightness }}"
           - service: light.turn_on
+            target:
+              entity_id: !input slave_entity
             data:
-              entity_id: "{{linked_entities | reject('eq', trigger.entity_id) | list }}"
               brightness: "{{ set_light_brightness }}"
           - delay:
               milliseconds: !input delay_miliseconds
@@ -171,8 +155,9 @@ action:
           - variables:
               set_light_color_temp: "{{ trigger.to_state.attributes.color_temp }}"
           - service: light.turn_on
+            target:
+              entity_id: !input slave_entity
             data:
-              entity_id: "{{linked_entities | reject('eq', trigger.entity_id) | list }}"
               color_temp: "{{ set_light_color_temp }}"
           - delay:
               milliseconds: !input delay_miliseconds
@@ -183,8 +168,9 @@ action:
           - variables:
               set_light_rgb_color: "{{ trigger.to_state.attributes.rgb_color }}"
           - service: light.turn_on
+            target:
+              entity_id: !input slave_entity
             data:
-              entity_id: "{{linked_entities | reject('eq', trigger.entity_id) | list }}"
               rgb_color: "{{ set_light_rgb_color }}"
           - delay:
               milliseconds: !input delay_miliseconds
@@ -195,8 +181,9 @@ action:
           - variables:
               set_light_hs_color: "{{ trigger.to_state.attributes.hs_color }}"
           - service: light.turn_on
+            target:
+              entity_id: !input slave_entity
             data:
-              entity_id: "{{linked_entities | reject('eq', trigger.entity_id) | list }}"
               hs_color: "{{ set_light_hs_color }}"
           - delay:
               milliseconds: !input delay_miliseconds
@@ -207,8 +194,9 @@ action:
           - variables:
               set_light_xy_color: "{{ trigger.to_state.attributes.xy_color }}"
           - service: light.turn_on
+            target:
+              entity_id: !input slave_entity
             data:
-              entity_id: "{{linked_entities | reject('eq', trigger.entity_id) | list }}"
               xy_color: "{{ set_light_xy_color }}"
           - delay:
               milliseconds: !input delay_miliseconds
