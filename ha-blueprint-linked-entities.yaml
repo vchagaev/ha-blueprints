@@ -155,17 +155,19 @@ action:
               {% if trigger.to_state.attributes.brightness is defined and trigger.from_state.attributes.brightness != trigger.to_state.attributes.brightness %}
                 {% set data = dict(data, brightness=trigger.to_state.attributes.brightness) %}
               {% endif %}
-              {% if trigger.to_state.attributes.color_temp is defined and trigger.from_state.attributes.color_temp != trigger.to_state.attributes.color_temp %}
+              {% set color_changed = trigger.from_state.attributes.rgb_color != trigger.to_state.attributes.rgb_color or
+                                      trigger.from_state.attributes.hs_color != trigger.to_state.attributes.hs_color or
+                                      trigger.from_state.attributes.xy_color != trigger.to_state.attributes.xy_color %}
+              {% if color_changed %}
+                {% if trigger.to_state.attributes.rgb_color is defined and trigger.from_state.attributes.rgb_color != trigger.to_state.attributes.rgb_color %}
+                  {% set data = dict(data, rgb_color=trigger.to_state.attributes.rgb_color) %}
+                {% elif trigger.to_state.attributes.hs_color is defined and trigger.from_state.attributes.hs_color != trigger.to_state.attributes.hs_color %}
+                  {% set data = dict(data, hs_color=trigger.to_state.attributes.hs_color) %}
+                {% elif trigger.to_state.attributes.xy_color is defined and trigger.from_state.attributes.xy_color != trigger.to_state.attributes.xy_color %}
+                  {% set data = dict(data, xy_color=trigger.to_state.attributes.xy_color) %}
+                {% endif %}
+              {% elif trigger.to_state.attributes.color_temp is defined and trigger.from_state.attributes.color_temp != trigger.to_state.attributes.color_temp %}
                 {% set data = dict(data, color_temp=trigger.to_state.attributes.color_temp) %}
-              {% endif %}
-              {% if trigger.to_state.attributes.rgb_color is defined and trigger.from_state.attributes.rgb_color != trigger.to_state.attributes.rgb_color %}
-                {% set data = dict(data, rgb_color=trigger.to_state.attributes.rgb_color) %}
-              {% endif %}
-              {% if trigger.to_state.attributes.hs_color is defined and trigger.from_state.attributes.hs_color != trigger.to_state.attributes.hs_color %}
-                {% set data = dict(data, hs_color=trigger.to_state.attributes.hs_color) %}
-              {% endif %}
-              {% if trigger.to_state.attributes.xy_color is defined and trigger.from_state.attributes.xy_color != trigger.to_state.attributes.xy_color %}
-                {% set data = dict(data, xy_color=trigger.to_state.attributes.xy_color) %}
               {% endif %}
               {{ data }}
           - delay:
