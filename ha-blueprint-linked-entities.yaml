@@ -10,16 +10,23 @@ blueprint:
     **Features:**
       - turn the MASTER entity ON → SLAVE turns ON
       - turn the MASTER entity OFF → SLAVE turns OFF
-      - set the MASTER brightness → SLAVE brightness matches
+      - set the MASTER brightness → SLAVE brightness matches (with optional multiplier)
       - set the MASTER color temp → SLAVE color temp matches
       - set the MASTER RGB/HS/XY color → SLAVE color matches
       - set the MASTER fan speed → SLAVE fan speed matches
+
+    **Brightness Multiplier:**
+      - 100% = Slave has same brightness as master
+      - 50% = Slave has half the brightness of master
+      - 200% = Slave has double the brightness of master
+      - Values are clamped between 1-255 (Home Assistant brightness range)
 
     **Use cases:**
       - Mirror a physical switch to a virtual switch
       - Sync a smart bulb to follow another bulb (one-way)
       - Make a dashboard entity follow a real device
       - LED indicator lights that follow device states
+      - Accent lighting that's dimmer than main lighting
 
     **IMPORTANT**: Only the master controls the slave. Changes to the slave are ignored.
 
@@ -30,6 +37,7 @@ blueprint:
         - Slave entity only receives commands
         - Supports all color modes (RGB, HS, XY)
         - Supports brightness, color temp, and fan speed
+        - Added brightness multiplier (1-300%) for adjustable slave brightness relative to master
 
   domain: automation
   input:
@@ -43,6 +51,16 @@ blueprint:
       description: The entity that mirrors the master. This entity will be controlled but will NOT trigger the automation.
       selector:
         entity:
+    brightness_multiplier:
+      name: Brightness Multiplier
+      description: Adjusts the slave's brightness relative to the master. 100% = same brightness, 50% = half brightness, 200% = double brightness. Only affects lights with brightness control.
+      selector:
+        number:
+          min: 1
+          max: 300
+          unit_of_measurement: "%"
+          mode: slider
+      default: 100
     delay_miliseconds:
       name: Delay
       description: How long to delay changes to the slave entity
@@ -61,6 +79,7 @@ max_exceeded: silent
 variables:
   master: !input master_entity
   slave: !input slave_entity
+  brightness_pct: !input brightness_multiplier
 
 trigger:
   - platform: state
@@ -140,12 +159,13 @@ action:
             id: set_brightness
         sequence:
           - variables:
-              set_light_brightness: "{{ trigger.to_state.attributes.brightness }}"
+              master_brightness: "{{ trigger.to_state.attributes.brightness }}"
+              adjusted_brightness: "{{ [(master_brightness * brightness_pct / 100) | round(0) | int, 255] | min | max(1) }}"
           - service: light.turn_on
             target:
               entity_id: !input slave_entity
             data:
-              brightness: "{{ set_light_brightness }}"
+              brightness: "{{ adjusted_brightness }}"
           - delay:
               milliseconds: !input delay_miliseconds
       - conditions:
