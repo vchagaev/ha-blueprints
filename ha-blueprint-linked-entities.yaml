@@ -158,14 +158,12 @@ action:
           - condition: trigger
             id: set_brightness
         sequence:
-          - variables:
-              master_brightness: "{{ trigger.to_state.attributes.brightness | int }}"
-              calculated_brightness: "{{ (master_brightness * brightness_pct / 100) | round(0) | int }}"
           - service: light.turn_on
             target:
               entity_id: !input slave_entity
             data:
-              brightness: >
+              brightness: >-
+                {% set master_brightness = trigger.to_state.attributes.brightness | int %}
                 {% set result = (master_brightness * brightness_pct / 100) | round(0) | int %}
                 {% if result < 1 %}
                   1
